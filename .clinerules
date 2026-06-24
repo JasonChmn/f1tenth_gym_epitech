@@ -1,0 +1,44 @@
+# Cline Rules
+
+## Core
+- Minimize tokens, tool calls, and context usage.
+- Gather only the information required to complete the task.
+- Prefer modifying existing code over introducing new abstractions.
+- Follow existing project patterns and conventions.
+
+## Discovery
+- Prefer targeted search before reading files; read surrounding context (±20 lines) before patching to avoid breaking adjacent logic.
+- Read only the necessary parts of files.
+- Avoid generated, build, vendor, and unrelated files.
+
+## Changes
+- Make the smallest change that solves the problem.
+- Verify functions, APIs, and assumptions before using them.
+- Avoid unrelated refactors, formatting changes, file moves, or new dependencies unless required.
+- Never modify .env, secrets, or config files without presenting a diff first.
+- For irreversible changes (DB migrations, schema changes, proto updates): present the full plan and wait for explicit confirmation before executing.
+- Treat contract files (CLAUDE.md, env interface specs, shared API definitions) as read-only unless explicitly instructed; present a diff and wait for confirmation.
+
+## Commands
+- Avoid large outputs; truncate or summarize when output exceeds ~50 lines.
+- Use RTK for commands likely to produce substantial output (build logs, test suites, installs).
+- Use timeouts for potentially blocking operations.
+- Never run test or build commands without output control (e.g., redirect to file or capped output), to prevent blocking or hanging sessions.
+- Prefer one stream at a time for debugging runs.
+- Prefer decomposed execution steps for debugging when a command includes initialization, external libraries, or runtime systems (e.g. simulators, ML frameworks, rendering engines).
+- Avoid chaining multiple initialization-sensitive operations into a single one-liner when diagnosing issues; isolate stages to identify blocking points.
+- When using Docker (docker run, docker compose run), prefer non-interactive execution (-T) unless interaction is explicitly required.
+- Assume that environment initialization (GUI, physics engines, GPU contexts, rendering backends) may block silently; validate initialization separately from runtime logic.
+
+## Validation
+- Run the smallest validation that provides confidence.
+- Avoid full-project test runs unless explicitly requested.
+- If modules are known to have coupled tests or side effects, escalate validation scope and flag it.
+
+## Dependencies
+- Never add, upgrade, or remove dependencies without listing the change and its rationale first.
+- Check for version conflicts before installing; flag silent incompatibilities (e.g. transitive deps).
+
+## Git
+- Review status and diff before major changes.
+- Never overwrite or revert user changes without instruction.
