@@ -77,7 +77,9 @@ def _pure_pursuit_policy(step_i, obs, waypoints, arc, total_arc, state):
     # Angle from car's orientation to the carrot
     dx, dy = tx - x, ty - y
     angle_to_target = math.atan2(dy, dx)
+    print("angle to target: ",angle_to_target," | yaw : ",yaw)
     angle_diff = angle_to_target - yaw
+    print("angle_diff : ",angle_diff)
 
     # Normalize to [-pi, pi]
     while angle_diff > math.pi:
@@ -152,7 +154,7 @@ for step_i in range(T):
             spd, steer = _random_policy(step_i)
             if args.controller == "onnx" and cid == 0 and session is not None:
                 spd, steer = _onnx_policy(session, obs)
-            elif args.controller == "pure_pursuit" and cid == 0 and use_pp:
+            elif args.controller == "pure_pursuit" and use_pp:
                 state = sim_obj._sim.agents[cid].state
                 spd, steer = _pure_pursuit_policy(step_i, obs, wpts, arc, tac, state)
             decisions[cid] = (spd, steer)

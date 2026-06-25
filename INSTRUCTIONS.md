@@ -95,6 +95,9 @@ docker compose run --rm -v .:/app sim python sim_recorder.py --steps 5000 --cont
 #### Replay recorded episodes (no sim dependency, requires X11/display)
 
 ```bash
+# Don't forget
+xhost +local:docker
+
 # Replay latest episode from recordings/
 docker compose run --rm -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v .:/app viz python viz_replay.py
 
@@ -130,21 +133,54 @@ docker compose run --rm viz python viz_topdown.py --no-display
 
 ## Training
 
-```bash
-# Run PPO training loop
-docker compose run --rm train
+### Quick Start
 
-# Resume from checkpoint (if logs exist)
-docker compose run --rm train
+```bash
+# Build the image first
+docker compose build sim train tensorboard
+
+# Train with default settings (4 parallel environments, saves latest model)
+docker compose run --rm train python test_RL/train_ppo.py
+
+# Resume from checkpoint (if logs/models exist)
+docker compose run --rm train python test_RL/train_ppo.py
 ```
+
+### Multi-environment examples
+
+```bash
+# Train with 1 environment (slower, easier debugging)
+docker compose run --rm train python test_RL/train_ppo.py --num-envs 1 --save-freq 100000
+
+# Train with 4 environments (balanced — recommended)
+docker compose run --rm train python test_RL/train_ppo.py --num-envs 4 --save-freq 500000
+
+# Train with 8 environments (faster data collection)
+docker compose run --rm train python test_RL/train_ppo.py --num-envs 8 --save-freq 500000
+```
+
+### Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `--num-envs N` | `4` | Number of parallel SubprocVecEnv workers (1–8) |
+| `--save-freq N` | `500000` | Steps interval between checkpoints (total steps, not per-env) |
 
 ### Monitor training with TensorBoard
 
 ```bash
-# Start TensorBoard server
-docker compose up tensorboard
+# Start TensorBoard server as a detached service (one-time)
+docker compose up tensorboard -d
 
-# Then open http://localhost:6006 in your browser
+# Point it at the training logs, then open http://localhost:6006
+docker compose exec tensorboard tensorboard --logdir /app/test_RL/tb_logs --host 0.0.0.0 --port 6006
+```
+
+### Export trained model to ONNX
+
+```bash
+# After training, export the latest model
+docker compose run --rm train python test_RL/export_onnx.py
 ```
 
 ---

@@ -90,7 +90,7 @@ _LIDAR_MAX         = 15.0        # clip max (m)
 _TTC_THRESH        = 0.015       # iTTC detection window (1.5 x dt at 100 Hz)
 _MAX_SLOTS         = 4           # hard cap: 4 cars
 _REQUIRED_LAPS     = 3           # number of completed laps to be FINISHED (status=2)
-_KNOCKBACK_REST    = 0.5         # restitution coefficient for vehicle-vehicle impulse
+_KNOCKBACK_REST    = 0.3         # restitution coefficient for vehicle-vehicle impulse
 _DNF_WINDOW_STEPS  = int(_DNF_WINDOW_SEC * _DECISION_FREQ_HZ)   # 160 steps
 
 # Per-car odometer lap detection constants (DESIGN.md § "Per-car odometer")
@@ -511,11 +511,54 @@ class _Sim:
     # ------------------------------------------------------------------
     # Knockback helper (vehicle-vehicle impulse exchange)
     # ------------------------------------------------------------------
+    def _apply_knockback_archive(self, i: int, j: int) -> None:
+        """
+        OLD knockback: velocity-based impulse exchange.
+        Cette version appliquait un état "confusion" faisant aller les voitures n'importe où
+        pendant une courte durée plutot qu'un vrai knockback.
+        (archivée — utiliser _apply_knockback pour le knockback positionnel)
+        """
+        si = self._sim.agents[i].state  # type: ignore[union-attr]
+        sj = self._sim.agents[j].state  # type: ignore[union-attr]
+
+        pi = np.array([si[0], si[1]])
+        pj = np.array([sj[0], sj[1]])
+        d  = pi - pj
+        dist = float(np.linalg.norm(d))
+        if dist < 1e-6:
+            print("Dist is too small ? ",dist)
+            return
+        n = d / dist  # contact normal: j→i
+
+        # world-frame velocity (forward component only — single-track approximation)
+        vi = si[3] * np.array([math.cos(si[4]), math.sin(si[4])])
+        vj = sj[3] * np.array([math.cos(sj[4]), math.sin(sj[4])])
+
+        vrel = float(np.dot(vi - vj, n))
+        """ if vrel >= 0.0:
+            # already separating
+            print("Already separating ?")
+            return """
+
+        impulse = -(1.0 + _KNOCKBACK_REST) * vrel / 2.0
+
+        vi_new = vi + impulse * n
+        vj_new = vj - impulse * n
+        print("n: ",n)
+
+        fwd_i = np.array([math.cos(si[4]), math.sin(si[4])])
+        fwd_j = np.array([math.cos(sj[4]), math.sin(sj[4])])
+
+        si[3] = float(np.clip(np.dot(vi_new, fwd_i), -5.0, 5.0))
+        sj[3] = float(np.clip(np.dot(vj_new, fwd_j), -5.0, 5.0))
+
     def _apply_knockback(self, i: int, j: int) -> None:
         """
-        Post-step impulse exchange for vehicle-vehicle collision detected by GJK.
-        Projects body-frame velocities to world frame, applies equal-mass restitution
-        impulse along the contact normal, projects back to body-frame forward speed.
+        Position-based knockback with subtle velocity modulation.
+
+        Main effect: positional displacement along the contact normal.
+        Subtle effect: velocity magnitude modulated ±15% of impulse, always preserving
+        the original sign of the forward speed to avoid unwanted orientation changes.
         """
         si = self._sim.agents[i].state  # type: ignore[union-attr]
         sj = self._sim.agents[j].state  # type: ignore[union-attr]
@@ -528,25 +571,41 @@ class _Sim:
             return
         n = d / dist  # contact normal: j→i
 
-        # world-frame velocity (forward component only — single-track approximation)
-        vi = si[3] * np.array([math.cos(si[4]), math.sin(si[4])])
-        vj = sj[3] * np.array([math.cos(sj[4]), math.sin(sj[4])])
-
-        vrel = float(np.dot(vi - vj, n))
+        # relative velocity along normal
+        vi_world = si[3] * np.array([math.cos(si[4]), math.sin(si[4])])
+        vj_world = sj[3] * np.array([math.cos(sj[4]), math.sin(sj[4])])
+        vrel = float(np.dot(vi_world - vj_world, n))
         if vrel >= 0.0:
-            # already separating
-            return
+            return  # already separating
 
-        impulse = -(1.0 + _KNOCKBACK_REST) * vrel / 2.0
+        impulse_mag = abs(vrel) * _KNOCKBACK_REST
 
-        vi_new = vi + impulse * n
-        vj_new = vj - impulse * n
+        # --- Position displacement (main effect) ---
+        si[0] += impulse_mag * n[0]
+        si[1] += impulse_mag * n[1]
+        sj[0] -= impulse_mag * n[0]
+        sj[1] -= impulse_mag * n[1]
 
+        # --- Subtle velocity influence (preserve sign) ---
         fwd_i = np.array([math.cos(si[4]), math.sin(si[4])])
         fwd_j = np.array([math.cos(sj[4]), math.sin(sj[4])])
 
-        si[3] = float(np.clip(np.dot(vi_new, fwd_i), -5.0, 5.0))
-        sj[3] = float(np.clip(np.dot(vj_new, fwd_j), -5.0, 5.0))
+        dot_normal_i = float(np.dot(vi_world, n))
+        dot_normal_j = float(np.dot(vj_world, n))
+
+        vel_change_i = impulse_mag * 0.15
+        vel_change_j = impulse_mag * 0.15
+
+        # Preserve sign, only modulate magnitude
+        if dot_normal_i > 0:
+            si[3] = min(si[3] + vel_change_i, _FWD_MAX_MS)
+        elif dot_normal_i < 0:
+            si[3] = max(si[3] - vel_change_i, -vel_change_i)
+
+        if dot_normal_j > 0:
+            sj[3] = min(sj[3] + vel_change_j, _FWD_MAX_MS)
+        elif dot_normal_j < 0:
+            sj[3] = max(sj[3] - vel_change_j, -vel_change_j)
 
     # ------------------------------------------------------------------
     # simulation_step
@@ -598,7 +657,9 @@ class _Sim:
                 if self._status[i] == 1:
                     self._wall_hit[i] |= bool(self._sim.agents[i].in_collision)
                     self._vehicle_hit[i] |= bool(int(self._sim.collision_idx[i]) >= 0)
-
+                    if (self._vehicle_hit[i]):
+                        j = int(self._sim.collision_idx[i])
+                        #print(f"COLLISION vehicle [{i}] <-> [{j}], idx={self._sim.collision_idx[i]}")
             # Per-agent collision response after each sub-step (active agents only)
             for i in range(n):
                 if self._status[i] != 1:
@@ -644,6 +705,7 @@ class _Sim:
             if self._status[i] == 1 and self._status[j] == 1:
                 if i < j:  # apply once per pair
                     self._apply_knockback(i, j)
+                    print(f"KNOCKBACK APPLIED [{i}] <-> [{j}]")
 
         self._step_count += 1
 

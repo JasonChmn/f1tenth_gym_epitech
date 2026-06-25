@@ -136,7 +136,7 @@ fig = plt.figure(figsize=(14, 9))
 fig.patch.set_facecolor(_BG)
 
 ax_map = fig.add_axes([0.01, 0.08, 0.98, 0.90])   # map: nearly full window
-ax_tel = fig.add_axes([0.01, 0.08, 0.22, 0.30])   # telemetry overlay (bottom-left)
+ax_tel = fig.add_axes([0.01, 0.69, 0.22, 0.30])   # telemetry overlay (bottom-left)
 ax_sld = fig.add_axes([0.01, 0.03, 0.79, 0.035])  # slider
 ax_btn = fig.add_axes([0.83, 0.025, 0.14, 0.045]) # play/pause button
 
@@ -150,10 +150,21 @@ ax_map.set_aspect("equal")
 ax_map.imshow(np.flipud(img), extent=extent, origin="lower",
               cmap="gray_r", alpha=0.85, zorder=1, interpolation="nearest")
 
-# static full trajectories (last point excluded, intentional)
-for cid in range(num_cars):
-    ax_map.plot(poses[:-1, cid, 0], poses[:-1, cid, 1],
-                color=_COLORS[cid % len(_COLORS)], lw=2.0, alpha=0.5, zorder=2)
+if False:
+    # static full trajectories (last point excluded, intentional)
+    for cid in range(num_cars):
+        ax_map.plot(poses[:-1, cid, 0], poses[:-1, cid, 1],
+                    color=_COLORS[cid % len(_COLORS)], lw=2.0, alpha=0.5, zorder=2)
+else:
+    for cid in range(num_cars):
+        color = _COLORS[cid % len(_COLORS)]
+        # Only plot up to the car's last valid step (where status != 0)
+        valid_steps = np.where(status[:, cid] != 0)[0]
+        if len(valid_steps) > 0:
+            last_valid = valid_steps[-1]
+            if last_valid > 0:
+                ax_map.plot(poses[:last_valid, cid, 0], poses[:last_valid, cid, 1],
+                            color=color, lw=2.0, alpha=0.5, zorder=2)
 
 # dynamic artists
 car_polys, car_arrows, traj_markers = [], [], []
