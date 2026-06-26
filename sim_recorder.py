@@ -77,9 +77,7 @@ def _pure_pursuit_policy(step_i, obs, waypoints, arc, total_arc, state):
     # Angle from car's orientation to the carrot
     dx, dy = tx - x, ty - y
     angle_to_target = math.atan2(dy, dx)
-    print("angle to target: ",angle_to_target," | yaw : ",yaw)
     angle_diff = angle_to_target - yaw
-    print("angle_diff : ",angle_diff)
 
     # Normalize to [-pi, pi]
     while angle_diff > math.pi:

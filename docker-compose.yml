@@ -2,12 +2,9 @@
 #
 # CPU default (all headless):
 #   sim          — smoke test / one-off scripts
-#   train        — SB3 training loop (CPU)
+#   train        — RL training loop, script: train_rl.py
 #   tensorboard  — TensorBoard on :6006
 #   viz          — headless PNG via matplotlib Agg
-#
-# GPU opt-in (requires nvidia-docker + DISPLAY):
-#   viz-gpu      — f1tenth native pyglet/GL renderer
 #
 # --- sim_recorder + viz_replay ---
 # Record an episode (headless, max speed):
@@ -20,11 +17,9 @@
 #   docker compose run --rm replay python viz_replay.py --npz /app/episode.npz --follow
 #
 # Quick start:
-#   docker compose run --rm train           # run train_ppo.py
+#   docker compose run --rm train           # run train_rl.py
 #   docker compose run --rm viz             # headless PNG → recordings/
 #   docker compose up  tensorboard          # open http://localhost:6006
-#   docker compose up  viz-gpu              # pyglet window (GPU + X needed)
-#
 # Shared bind-mount: ./ → /app (live-reloads code changes without rebuild).
 # recordings/ directory is created on first use.
 
@@ -50,7 +45,7 @@ services:
     working_dir: /app
     environment:
       MPLBACKEND: Agg
-    command: python train_ppo.py
+    command: python test_RL/train_rl.py --num-envs 8 --save-freq 500000
 
   tensorboard:
     build:
@@ -61,7 +56,8 @@ services:
     working_dir: /app
     ports:
       - "6006:6006"
-    command: tensorboard --logdir /app/logs --host 0.0.0.0 --port 6006
+    command: tail -f /dev/null
+#    command: tensorboard --logdir /app/logs --host 0.0.0.0 --port 6006
 
   viz:
     build:
@@ -73,21 +69,6 @@ services:
     environment:
       MPLBACKEND: Agg
     command: python viz_topdown.py
-
-  viz-gpu:
-    build:
-      context: .
-      target: gpu
-    runtime: nvidia
-    volumes:
-      - .:/app
-      - /tmp/.X11-unix:/tmp/.X11-unix
-    working_dir: /app
-    environment:
-      DISPLAY: "${DISPLAY:-:0}"
-      NVIDIA_VISIBLE_DEVICES: all
-      NVIDIA_DRIVER_CAPABILITIES: graphics
-    command: python viz_pyglet.py
 
   # --- sim_recorder (headless episode recording) ---
   recorder:
@@ -101,15 +82,14 @@ services:
       MPLBACKEND: Agg
     command: python sim_recorder.py --steps 500 --num-cars 1 --out /app/episode.npz
 
-  # --- viz_replay (X11-forwarded top-down replay) ---
+  # --- viz_replay (top-down replay, headless matplotlib) ---
   replay:
     build:
       context: .
-      target: gpu
+      target: base
     volumes:
       - .:/app
-      - /tmp/.X11-unix:/tmp/.X11-unix
     working_dir: /app
     environment:
-      DISPLAY: "${DISPLAY:-:0}"
+      MPLBACKEND: Agg
     command: python viz_replay.py --npz /app/episode.npz

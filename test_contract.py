@@ -13,7 +13,7 @@ from _harness import run_all, run_test, ok, fail
 from env_simulation import (
     reset, get_obs, apply_action, simulation_step, get_step_info, close,
     get_space_info, _LIDAR_RAYS, _MAX_SLOTS, _FWD_MAX_MS, _get_sim,
-    _REQUIRED_LAPS, _DECISION_FREQ_HZ,
+    _REQUIRED_LAPS, _DECISION_FREQ_HZ, _KNOCKBACK_REST,
 )
 
 # The module's _get_sim returns the _Sim singleton directly. We alias it for clarity:
@@ -368,9 +368,21 @@ def t15_progress_bounds():
 
 
 # ---------------------------------------------------------------------------
-# T20 — knockback impulse math verification (same as integration)
+# T20 — knockback subtle velocity modulation verification
+#
+# Scenario: two cars on a straight, 1 m apart laterally (y=4.5), moving head-on along +x.
+#   Car-0 at x=5 heading +x at v=+2 m/s
+#   Car-1 at x=7 heading -x at v=−2 m/s
+# Distance = 2 m → collision triggers _apply_knockback(0, 1).
+# Contact normal n = agent0→agent1 direction projected onto collision plane = [−1, 0].
+# Relative velocity along n: vrel = (v_i − v_j)·n = (+2 − (−2))·(−1) = −4 m/s.
+# Impulse magnitude: J = |vrel| × knockback_strength = 4.0 × 0.3 = 1.2 N·s/kg.
+# Subtle modulation: velocity_change = J × _KNOCKBACK_REST = 1.2 × 0.15 = 0.18 m/s.
+# Car-0: dot_normal_i = v_i·n = +2×(−1) + 0×0 = −2 → si[3] = max(+2 − 0.18, −0.18) = +1.82
+# Car-1: dot_normal_j = v_j·n = (−2)×(−1) + 0×0 = +2  → sj[3] = min(−2 + 0.18, max) = −1.82
 # ---------------------------------------------------------------------------
 def t20_knockback_impulse_math():
+    """Verify position-based knockback applies subtle velocity modulation (±15% impulse)."""
     reset(2)
     sim_obj = _get_sim_raw()
     engine = sim_obj._sim
@@ -381,13 +393,21 @@ def t20_knockback_impulse_math():
     car1_state = engine.agents[1].state
     # ST state: [x, y, steer, vel, yaw, yaw_rate, slip]; idx3=speed, idx4=yaw.
     # Both heading 0; cars approach head-on along +x.
+    # New position-based knockback: subtle velocity modulation (±15% of impulse).
     car0_state[:] = [5.0, 4.5, 0.0,  v_forward, 0.0, 0.0, 0.0]  # moving +x
     car1_state[:] = [7.0, 4.5, 0.0, -v_forward, 0.0, 0.0, 0.0]  # moving -x
     sim_obj._apply_knockback(0, 1)
     v0_after = float(car0_state[3])
     v1_after = float(car1_state[3])
-    expected_v0 = -0.5 * v_forward
-    expected_v1 = +0.5 * v_forward
+
+    # Compute expected values for position-based knockback:
+    # contact normal n = [-1, 0], vrel = -4.0, impulse_mag = 4.0 * 0.3 = 1.2
+    # vel_change = 1.2 * 0.15 = 0.18
+    # car0: dot_normal_i = -2 → si[3] = max(2.0 - 0.18, -0.18) = 1.82
+    # car1: dot_normal_j = +2 → sj[3] = min(-2.0 + 0.18, max) = -1.82
+    vel_change = abs(4.0) * _KNOCKBACK_REST * 0.15
+    expected_v0 = max(v_forward - vel_change, -vel_change)
+    expected_v1 = min(-v_forward + vel_change, _FWD_MAX_MS)
 
     assert abs(v0_after - expected_v0) < 0.01, \
         f"knockback car0: expected={expected_v0:+.3f}, got={v0_after:+.3f}"

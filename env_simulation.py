@@ -4,12 +4,9 @@ env_simulation.py — Crash&Learn Grand Prix simulation backend.
 Private _Sim singleton wrapping f110_gym.envs.base_classes.Simulator directly
 (NOT F110Env, NOT gym.make). Exposes exactly 7 module-level functions.
 
-Import bootstrap: gym/pyglet stubs are installed into sys.modules before any
-f110_gym import so the engine loads without gym or pyglet installed.
-
 LiDAR class-variable trap: RaceCar.scan_simulator is a class-level singleton.
 After every Simulator (re)construction _apply_lidar_override() must be called to
-rebuild the 100-beam scanner and its geometry arrays. Multiple Simulator instances
+build the 100-beam scanner and its geometry arrays. Multiple Simulator instances
 in ONE interpreter share these class variables (harmless under SubprocVecEnv process
 isolation; relevant for the eval harness and unit tests that build simulators in sequence).
 
@@ -24,37 +21,15 @@ Collisions are never penalised and never terminate the episode.
 """
 
 # ---------------------------------------------------------------------------
-# Import bootstrap — must run before ANY f110_gym import
+# Repo path — f110_gym package lives one level up from this file's parent
 # ---------------------------------------------------------------------------
-import sys
 import os
-import types
 import warnings
-
-def _bootstrap_gym_stubs() -> None:
-    def _mk(name: str) -> types.ModuleType:
-        m = types.ModuleType(name)
-        m.__path__ = []  # type: ignore[assignment]
-        return m
-
-    for name in [
-        "gym", "gym.error", "gym.spaces", "gym.utils",
-        "gym.utils.seeding", "gym.envs", "gym.envs.registration",
-        "pyglet", "pyglet.gl",
-    ]:
-        if name not in sys.modules:
-            mod = _mk(name)
-            mod.register = lambda *a, **kw: None  # type: ignore[attr-defined]
-            mod.Env = object                       # type: ignore[attr-defined]
-            mod.options = {}                       # type: ignore[attr-defined]
-            sys.modules[name] = mod
-
-_bootstrap_gym_stubs()
 
 _REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 _GYM_PATH = os.path.join(_REPO_ROOT, "gym")
-if _GYM_PATH not in sys.path:
-    sys.path.insert(0, _GYM_PATH)
+if _GYM_PATH not in __import__("sys").path:
+    __import__("sys").path.insert(0, _GYM_PATH)
 
 warnings.filterwarnings("ignore", message="Chosen integrator is RK4")
 
@@ -577,6 +552,7 @@ class _Sim:
         vrel = float(np.dot(vi_world - vj_world, n))
         if vrel >= 0.0:
             return  # already separating
+        vrel = max(abs(vrel), 0.1)
 
         impulse_mag = abs(vrel) * _KNOCKBACK_REST
 
@@ -705,7 +681,6 @@ class _Sim:
             if self._status[i] == 1 and self._status[j] == 1:
                 if i < j:  # apply once per pair
                     self._apply_knockback(i, j)
-                    print(f"KNOCKBACK APPLIED [{i}] <-> [{j}]")
 
         self._step_count += 1
 
@@ -990,7 +965,7 @@ def get_space_info() -> dict:
     return {
         "observations": {
             "lidar":     {"shape": (_LIDAR_RAYS,), "bounds": (0.0, _LIDAR_MAX), "unit": "meters"},
-            "velocity":  {"shape": "scalar", "bounds": (-5.0, 5.0),   "unit": "m/s"},
+            "velocity":  {"shape": "scalar", "bounds": (-_REV_MAX_MS, _FWD_MAX_MS),   "unit": "m/s"},
             "steering":  {"shape": "scalar", "bounds": (_PARAMS["s_min"], _PARAMS["s_max"]), "unit": "rad"},
             "progress":  {"shape": "scalar", "bounds": (0.0, 1.0),    "unit": "normalized lap"},
             "lap_count": {"shape": "scalar", "bounds": (0, math.inf), "unit": "int"},

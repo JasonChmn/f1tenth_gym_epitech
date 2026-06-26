@@ -385,8 +385,8 @@ truncated  = info["step_count"] >= my_limit   # or info["stagnation"][0]
 
 **Why no `done`**: f1tenth's shell `done` flips on collision OR finishing 2 laps, evaluated
 from the ego only (asymmetric, undocumented). By bypassing the shell and delegating to
-students we align `terminated`/`truncated` with correct Bellman bootstrapping (PPO/SAC need
-this distinction). Misunderstanding shows up in their training curves — intended pedagogical
+students we align `terminated`/`truncated` with correct Bellman bootstrapping for your chosen RL algorithm.
+Misunderstanding shows up in their training curves — intended pedagogical
 moment.
 
 ### `close() -> None`
@@ -706,7 +706,7 @@ The 2D numba engine is substantially faster than the previous PyBullet backend.
 > **N=4 note**: the 12× slowdown vs N=1 is dominated by GJK collision detection (O(N²)
 > pairs = 6 pairs at N=4 vs 0 at N=1) plus 4 independent LiDAR scans. At 500 steps/s the
 > sim still delivers ~30 000 decision-steps/min on a single core — well above the RL data
-> rate needed for SB3 PPO. SubprocVecEnv over multiple cores scales the throughput linearly.
+> rate needed for any RL algorithm. SubprocVecEnv over multiple cores scales the throughput linearly.
 
 ### Tournament timing & live play
 
@@ -800,7 +800,7 @@ docker compose up viz-gpu        # requires nvidia-docker + X
 
 GPU is **optional and allowed**, never required. CPU is the default path for everything.
 Students who have a GPU may use it for (a) the nicer pyglet rendering (`viz-gpu`) and (b) RL
-training (`stable-baselines3` with `device="cuda"`). Not using a GPU costs only render
+training (e.g., with `device="cuda"`). Not using a GPU costs only render
 prettiness and training speed, never correctness.
 
 ---

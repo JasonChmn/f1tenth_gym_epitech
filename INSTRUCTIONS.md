@@ -81,7 +81,7 @@ docker compose run --rm -v .:/app viz python viz_topdown.py --record /app/episod
 docker compose run --rm -v .:/app sim python sim_recorder.py --steps 500 --num-cars 1
 
 # Record with an ONNX model policy for car 0
-docker compose run --rm -v .:/app sim python sim_recorder.py --steps 800 --model /app/submission/model.onnx --out /app/episode_demo.npz
+docker compose run --rm -v .:/app sim python sim_recorder.py --steps 200 --model /app/submission/model.onnx --out /app/episode_demo.npz
 
 # Multi-car recording (up to 4 cars)
 docker compose run --rm -v .:/app sim python sim_recorder.py --steps 1000 --num-cars 3 --out /app/episode_3cars.npz
@@ -133,38 +133,38 @@ docker compose run --rm viz python viz_topdown.py --no-display
 
 ## Training
 
+### RL Dependencies Installed in Docker Image
+
+The following libraries are pre-installed for reinforcement learning:
+
+| Package | Purpose |
+|---|---|
+| `gymnasium` | Gym-style environment API (use this, not the legacy `gym`) |
+| `torch` | PyTorch for neural network training |
+| `tyro` | CLI argument parsing (optional) |
+| `stable-baselines3` + `sb3-contrib` | Pre-trained baselines: PPO, SAC, DDPG, TD3, A2C, etc. |
+
+You can install additional packages inside the container with `docker compose run --rm train pip install <package>` if needed.
+
 ### Quick Start
 
 ```bash
 # Build the image first
 docker compose build sim train tensorboard
 
-# Train with default settings (4 parallel environments, saves latest model)
-docker compose run --rm train python test_RL/train_ppo.py
+# Train with default settings (4 parallel environments, save freq 500k steps)
+docker compose run --rm train
 
-# Resume from checkpoint (if logs/models exist)
-docker compose run --rm train python test_RL/train_ppo.py
+# Override defaults
+docker compose run --rm train python test_RL/train_rl.py --num-envs 8 --save-freq 500000
 ```
 
-### Multi-environment examples
-
-```bash
-# Train with 1 environment (slower, easier debugging)
-docker compose run --rm train python test_RL/train_ppo.py --num-envs 1 --save-freq 100000
-
-# Train with 4 environments (balanced — recommended)
-docker compose run --rm train python test_RL/train_ppo.py --num-envs 4 --save-freq 500000
-
-# Train with 8 environments (faster data collection)
-docker compose run --rm train python test_RL/train_ppo.py --num-envs 8 --save-freq 500000
-```
-
-### Arguments
+### Arguments (passed via docker compose run)
 
 | Argument | Default | Description |
 |---|---|---|
-| `--num-envs N` | `4` | Number of parallel SubprocVecEnv workers (1–8) |
-| `--save-freq N` | `500000` | Steps interval between checkpoints (total steps, not per-env) |
+| `--num-envs N` | `4` | Number of parallel SubprocVecEnv workers |
+| `--save-freq N` | `500000` | Steps interval between checkpoints (total steps) |
 
 ### Monitor training with TensorBoard
 
