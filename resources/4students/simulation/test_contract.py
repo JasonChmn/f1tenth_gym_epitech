@@ -12,8 +12,9 @@ from _harness import run_all, run_test, ok, fail
 # ---------------------------------------------------------------------------
 from env_simulation import (
     reset, get_obs, apply_action, simulation_step, get_step_info, close,
-    get_space_info, _LIDAR_RAYS, _MAX_SLOTS, _FWD_MAX_MS, _get_sim,
+    get_space_info, _LIDAR_RAYS, _MAX_SLOTS, _get_sim,
     _REQUIRED_LAPS, _DECISION_FREQ_HZ, _KNOCKBACK_REST,
+    _PARAMS,
 )
 
 # The module's _get_sim returns the _Sim singleton directly. We alias it for clarity:
@@ -61,7 +62,7 @@ def t01_space_shape():
 
     assert obs0["lidar"].shape == (_LIDAR_RAYS,), \
         f"lidar shape {obs0['lidar'].shape} != {_LIDAR_RAYS}"
-    assert obs0["velocity"] >= -_FWD_MAX_MS and obs0["velocity"] <= _FWD_MAX_MS, \
+    assert obs0["velocity"] >= _PARAMS["v_min"] and obs0["velocity"] <= _PARAMS["v_max"], \
         "velocity out of bounds"
     space = get_space_info()
     # get_space_info returns {"observations": {...}, "actions": {...}, "decision_freq_hz": ...}
@@ -104,7 +105,7 @@ def t03_zero_action_stays_on_spot():
 # ---------------------------------------------------------------------------
 def t04_forward_thrust():
     reset(1)
-    apply_action(0, _FWD_MAX_MS, 0.0)
+    apply_action(0, _PARAMS["v_max"], 0.0)
     for _ in range(10): simulation_step()
     info = get_step_info()
     assert get_obs(0)["velocity"] > 1.0, f"velocity {get_obs(0)['velocity']} <= 1.0"
@@ -407,7 +408,7 @@ def t20_knockback_impulse_math():
     # car1: dot_normal_j = +2 → sj[3] = min(-2.0 + 0.18, max) = -1.82
     vel_change = abs(4.0) * _KNOCKBACK_REST * 0.15
     expected_v0 = max(v_forward - vel_change, -vel_change)
-    expected_v1 = min(-v_forward + vel_change, _FWD_MAX_MS)
+    expected_v1 = min(-v_forward + vel_change, _PARAMS["v_max"])
 
     assert abs(v0_after - expected_v0) < 0.01, \
         f"knockback car0: expected={expected_v0:+.3f}, got={v0_after:+.3f}"

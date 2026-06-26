@@ -50,8 +50,6 @@ from f110_gym.envs.laser_models import ScanSimulator2D
 _FREQ_HZ           = 100         # physics sub-step rate (Hz)
 _DECISION_FREQ_HZ  = 20          # control / bookkeeping rate (Hz)
 _PHYSICS_STEPS     = 5           # sub-steps per decision step
-_FWD_MAX_MS        = 5.0         # forward target-speed cap (m/s)
-_REV_MAX_MS        = 0.6         # reverse target-speed cap (m/s)
 _FRICTION_LO       = 0.75        # minimum surface friction (engine mu)
 _FRICTION_HI       = 1.0         # maximum surface friction
 _FRICTION_INTERVAL_SEC = (30, 45)  # random interval between friction changes (s)
@@ -65,7 +63,7 @@ _LIDAR_MAX         = 15.0        # clip max (m)
 _TTC_THRESH        = 0.015       # iTTC detection window (1.5 x dt at 100 Hz)
 _MAX_SLOTS         = 4           # hard cap: 4 cars
 _REQUIRED_LAPS     = 3           # number of completed laps to be FINISHED (status=2)
-_KNOCKBACK_REST    = 0.3         # restitution coefficient for vehicle-vehicle impulse
+_KNOCKBACK_REST    = 0.6         # restitution coefficient for vehicle-vehicle impulse
 _DNF_WINDOW_STEPS  = int(_DNF_WINDOW_SEC * _DECISION_FREQ_HZ)   # 160 steps
 
 # Per-car odometer lap detection constants (DESIGN.md § "Per-car odometer")
@@ -439,7 +437,7 @@ class _Sim:
     def apply_action(self, agent_id: int, target_speed: float, steering: float) -> None:
         if self._status[agent_id] != 1:   # only ACTIVE cars accept actions
             return
-        speed = float(np.clip(target_speed, -_REV_MAX_MS, _FWD_MAX_MS))
+        speed = float(np.clip(target_speed, _PARAMS["v_min"], _PARAMS["v_max"]))
         steer = float(np.clip(steering, _PARAMS["s_min"], _PARAMS["s_max"]))
         # If pinned to wall, only a reverse command can unpin.
         # Forward commands are silently ignored until the car reverses away.
@@ -486,46 +484,6 @@ class _Sim:
     # ------------------------------------------------------------------
     # Knockback helper (vehicle-vehicle impulse exchange)
     # ------------------------------------------------------------------
-    def _apply_knockback_archive(self, i: int, j: int) -> None:
-        """
-        OLD knockback: velocity-based impulse exchange.
-        Cette version appliquait un état "confusion" faisant aller les voitures n'importe où
-        pendant une courte durée plutot qu'un vrai knockback.
-        (archivée — utiliser _apply_knockback pour le knockback positionnel)
-        """
-        si = self._sim.agents[i].state  # type: ignore[union-attr]
-        sj = self._sim.agents[j].state  # type: ignore[union-attr]
-
-        pi = np.array([si[0], si[1]])
-        pj = np.array([sj[0], sj[1]])
-        d  = pi - pj
-        dist = float(np.linalg.norm(d))
-        if dist < 1e-6:
-            print("Dist is too small ? ",dist)
-            return
-        n = d / dist  # contact normal: j→i
-
-        # world-frame velocity (forward component only — single-track approximation)
-        vi = si[3] * np.array([math.cos(si[4]), math.sin(si[4])])
-        vj = sj[3] * np.array([math.cos(sj[4]), math.sin(sj[4])])
-
-        vrel = float(np.dot(vi - vj, n))
-        """ if vrel >= 0.0:
-            # already separating
-            print("Already separating ?")
-            return """
-
-        impulse = -(1.0 + _KNOCKBACK_REST) * vrel / 2.0
-
-        vi_new = vi + impulse * n
-        vj_new = vj - impulse * n
-        print("n: ",n)
-
-        fwd_i = np.array([math.cos(si[4]), math.sin(si[4])])
-        fwd_j = np.array([math.cos(sj[4]), math.sin(sj[4])])
-
-        si[3] = float(np.clip(np.dot(vi_new, fwd_i), -5.0, 5.0))
-        sj[3] = float(np.clip(np.dot(vj_new, fwd_j), -5.0, 5.0))
 
     def _apply_knockback(self, i: int, j: int) -> None:
         """
@@ -554,34 +512,45 @@ class _Sim:
             return  # already separating
         vrel = max(abs(vrel), 0.1)
 
-        impulse_mag = abs(vrel) * _KNOCKBACK_REST
+        impulse_mag = min(abs(vrel) * _KNOCKBACK_REST, 0.6)
+
+        speed_i = float(np.linalg.norm(vi_world))
+        speed_j = float(np.linalg.norm(vj_world))
+        speed_sum = speed_i + speed_j
+        if speed_sum > 1e-5:
+            impulse_mag_j_to_i = impulse_mag * (speed_j / speed_sum)
+            impulse_mag_i_to_j = impulse_mag * (speed_i / speed_sum)
+        else:
+            # Both are almost stagnant
+            impulse_mag_j_to_i = impulse_mag * 0.5
+            impulse_mag_i_to_j = impulse_mag * 0.5
+        
+        print("impulses: ",impulse_mag_j_to_i," | ",impulse_mag_i_to_j," total: ",impulse_mag)
 
         # --- Position displacement (main effect) ---
-        si[0] += impulse_mag * n[0]
-        si[1] += impulse_mag * n[1]
-        sj[0] -= impulse_mag * n[0]
-        sj[1] -= impulse_mag * n[1]
+        si[0] += impulse_mag_j_to_i * n[0]
+        si[1] += impulse_mag_j_to_i * n[1]
+        sj[0] -= impulse_mag_i_to_j * n[0]
+        sj[1] -= impulse_mag_i_to_j * n[1]
 
         # --- Subtle velocity influence (preserve sign) ---
-        fwd_i = np.array([math.cos(si[4]), math.sin(si[4])])
-        fwd_j = np.array([math.cos(sj[4]), math.sin(sj[4])])
 
         dot_normal_i = float(np.dot(vi_world, n))
         dot_normal_j = float(np.dot(vj_world, n))
 
-        vel_change_i = impulse_mag * 0.15
-        vel_change_j = impulse_mag * 0.15
+        vel_change_i = impulse_mag_j_to_i * 0.15
+        vel_change_j = impulse_mag_i_to_j * 0.15
 
         # Preserve sign, only modulate magnitude
         if dot_normal_i > 0:
-            si[3] = min(si[3] + vel_change_i, _FWD_MAX_MS)
+            si[3] = min(si[3] + vel_change_i, _PARAMS["v_max"])
         elif dot_normal_i < 0:
             si[3] = max(si[3] - vel_change_i, -vel_change_i)
 
         if dot_normal_j > 0:
-            sj[3] = min(sj[3] + vel_change_j, _FWD_MAX_MS)
+            sj[3] = min(sj[3] + vel_change_j, _PARAMS["v_max"])
         elif dot_normal_j < 0:
-            sj[3] = max(sj[3] - vel_change_j, -vel_change_j)
+            sj[3] = max(sj[3] - vel_change_j, -vel_change_j) 
 
     # ------------------------------------------------------------------
     # simulation_step
@@ -810,6 +779,7 @@ class _Sim:
     # get_obs
     # ------------------------------------------------------------------
     def get_obs(self, agent_id: int) -> dict:
+        # See agent.state in base_classes.py
         assert self._sim is not None, "Call reset() before get_obs()"
 
         n = self._num_agents
@@ -831,7 +801,7 @@ class _Sim:
         scan     = np.clip(raw_scan * noise, _LIDAR_MIN, _LIDAR_MAX).astype(np.float32)
 
         velocity = float(agent.state[3])
-        steering = float(self._steering_cmd[agent_id])
+        steering = float(agent.state[2])
         progress = float(self._progress[agent_id])   # own-start rel phase
         lap_count = int(self._lap_count[agent_id])
 
@@ -965,14 +935,14 @@ def get_space_info() -> dict:
     return {
         "observations": {
             "lidar":     {"shape": (_LIDAR_RAYS,), "bounds": (0.0, _LIDAR_MAX), "unit": "meters"},
-            "velocity":  {"shape": "scalar", "bounds": (-_REV_MAX_MS, _FWD_MAX_MS),   "unit": "m/s"},
+            "velocity":  {"shape": "scalar", "bounds": (_PARAMS["v_min"], _PARAMS["v_max"]),   "unit": "m/s"},
             "steering":  {"shape": "scalar", "bounds": (_PARAMS["s_min"], _PARAMS["s_max"]), "unit": "rad"},
             "progress":  {"shape": "scalar", "bounds": (0.0, 1.0),    "unit": "normalized lap"},
             "lap_count": {"shape": "scalar", "bounds": (0, math.inf), "unit": "int"},
             "opponents": {"shape": "dict[0..3]",                      "unit": "see DESIGN.md"},
         },
         "actions": {
-            "target_speed": {"bounds": (-_REV_MAX_MS, _FWD_MAX_MS), "unit": "m/s target velocity"},
+            "target_speed": {"bounds": (_PARAMS["v_min"], _PARAMS["v_max"]), "unit": "m/s target velocity"},
             "steering":     {"bounds": (_PARAMS["s_min"], _PARAMS["s_max"]), "unit": "rad"},
         },
         "decision_freq_hz": _DECISION_FREQ_HZ,

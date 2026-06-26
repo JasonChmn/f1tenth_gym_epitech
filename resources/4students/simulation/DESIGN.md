@@ -157,7 +157,7 @@ physics — call exactly once per loop, after all `apply_action` calls.
         "opponents":  {"shape": "dict[0..3]",                       "unit": "see below"},
     },
     "actions": {
-        "target_speed": {"bounds": (-0.6, 5.0),  "unit": "m/s target velocity (asymmetric: fwd 5.0, rev 0.6)"},
+        "target_speed": {"bounds": (-0.6, 5.0),  "unit": "m/s target velocity (asymmetric)"},
         "steering":     {"bounds": (-0.4189, 0.4189), "unit": "rad"},
     },
     "decision_freq_hz": 20,   # control rate; one simulation_step() = one decision (see below)
@@ -174,13 +174,10 @@ intentionally undocumented to students).
 scalars, NOT `np.ndarray` shape `(1,)`. Students wrap in `np.array([v])` themselves
 if needed for tensor concatenation. (Fixes review gap 1.)
 
-**Velocity bounds** `(-5.0, 5.0)` are *observation* bounds (measured body-frame speed, which
-can briefly go negative in collisions). They are NOT the action bounds — the *commanded*
-target speed is asymmetric `(-_REV_MAX_MS, _FWD_MAX_MS) = (-0.6, 5.0)`. (Fixes review gap 2.)
+**Velocity bounds** asymmetric matches the engine's `v_min / v_max` exactly; the wrapper
 
 **Steering bound** `0.4189 rad` matches the engine's `s_min / s_max` exactly; the wrapper
-clamps with `np.clip(steering, _PARAMS["s_min"], _PARAMS["s_max"])`, and the engine enforces
-its own limits underneath.
+clamps with `np.clip(steering, _PARAMS["s_min"], _PARAMS["s_max"])`, and the engine enforces its own limits underneath.
 
 > The space contract is **unchanged** by the per-car odometer lap detection: `progress`
 > stays a scalar in `[0,1)` (now the *current car's lap phase measured from its own start*),
@@ -329,8 +326,7 @@ for PyTorch/ONNX. Index by slot number, not by live position.
 
 ### `apply_action(agent_id, target_speed, steering) -> None`
 
-- `target_speed`: target velocity m/s, asymmetric `[-0.6, 5.0]` (forward `_FWD_MAX_MS=5.0`,
-  reverse `_REV_MAX_MS=0.6`), silently clamped. The engine's own `v_max` default is 20 m/s —
+- `target_speed`: target velocity m/s, asymmetric `[v_min, v_max]`), silently clamped.
   we clamp to our bounds ourselves before passing to the engine.
 - `steering`: wheel angle rad, `[-0.42, 0.42]`, silently clamped.
 
@@ -644,8 +640,6 @@ timers 5× too long.
 | `_FREQ_HZ` | 100 | Hz | physics rate, 10 ms timestep (single-track RK4) |
 | `_DECISION_FREQ_HZ` | 20 | Hz | control rate; one `simulation_step()` = 1 decision |
 | `_PHYSICS_STEPS` | 5 | — | physics sub-steps per decision (`_FREQ_HZ / _DECISION_FREQ_HZ`); action held constant (frame-skip) |
-| `_FWD_MAX_MS` | 5.0 | m/s | forward target-speed cap |
-| `_REV_MAX_MS` | 0.6 | m/s | reverse target-speed cap (asymmetric) |
 | `_FRICTION_LO` | 0.75 | — | mild reduction only (engine `mu` floor) |
 | `_FRICTION_HI` | 1.0 | — | upper bound, also reset value |
 | `_FRICTION_INTERVAL_SEC` | [30, 45] | s | random interval between changes |

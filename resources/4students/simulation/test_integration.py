@@ -12,7 +12,7 @@ from _harness import run_all, run_test, ok, fail
 # ---------------------------------------------------------------------------
 from env_simulation import (
     get_space_info, reset, get_obs, apply_action, simulation_step, get_step_info, close,
-    _LIDAR_RAYS, _MAX_SLOTS, _FWD_MAX_MS, _get_sim, _DNF_WINDOW_STEPS, _FRICTION_HI,
+    _LIDAR_RAYS, _MAX_SLOTS, _get_sim, _DNF_WINDOW_STEPS, _FRICTION_HI, _PARAMS,
 )
 from f110_gym.envs.base_classes import RaceCar
 
@@ -48,8 +48,8 @@ def t05_vehicle_collision_no_terminate_knockback():
     dist      = None
 
     for i in range(60):
-        apply_action(0, _FWD_MAX_MS, 0.0)
-        apply_action(1, _FWD_MAX_MS, 0.0)
+        apply_action(0, _PARAMS["v_max"], 0.0)
+        apply_action(1, _PARAMS["v_max"], 0.0)
         simulation_step()
         info = get_step_info()
 
@@ -138,7 +138,7 @@ def t_wall_hit_physics():
     st[3] = 0.0                                            # start from rest; thrust accelerates
     fired = False
     for _ in range(80):
-        apply_action(0, _FWD_MAX_MS, 0.0)
+        apply_action(0, _PARAMS["v_max"], 0.0)
         simulation_step()
         info = get_step_info()
         if bool(info["collisions"]["wall"][0]):
