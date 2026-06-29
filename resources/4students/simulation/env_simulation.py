@@ -564,6 +564,8 @@ class _Sim:
         """
         assert self._sim is not None, "Call reset() before simulation_step()"
 
+        print("!!!! Test with different friction values, to see if it works !!!!")
+
         n = self._num_agents
 
         # Build control matrix; DNF'd slots get zero action
