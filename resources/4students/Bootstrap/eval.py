@@ -1,11 +1,17 @@
 """Evaluate trained DQN model on CartPole-v1 with rendering."""
 
+import os
+
+# Must be set BEFORE any torch import to prevent CUDA hanging
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 import gymnasium as gym
 import torch
 
 from model import QNetwork
 from utils import set_seed
 
+USE_RANDOM = False
 
 def main():
     set_seed(42)
@@ -32,10 +38,13 @@ def main():
         step_idx = 0
 
         while not (done or truncated):
-            action = torch.tensor([obs], dtype=torch.float32).to(device)
-            with torch.no_grad():
-                q_values = model(action)
-            action = q_values.argmax(dim=-1).cpu().item()
+            if USE_RANDOM:
+                action = env.action_space.sample()  # random action
+            else:
+                action = torch.tensor([obs], dtype=torch.float32).to(device)
+                with torch.no_grad():
+                    q_values = model(action)
+                action = q_values.argmax(dim=-1).cpu().item()
 
             obs, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
@@ -43,7 +52,7 @@ def main():
             step_idx += 1
 
         rewards.append(ep_reward)
-        print(f"Episode {ep + 1}: reward={ep_reward:.1f}  steps={step_idx}")
+        print(f"Episode {ep + 1} is over: reward={ep_reward:.1f}  steps={step_idx}")
 
     env.close()
     print(f"\nAverage reward over 5 episodes: {sum(rewards)/len(rewards):.2f}")
