@@ -4,6 +4,34 @@ author:         jason CHEMIN
 version:        0.1
 ---
 
+## How do you learn?
+
+At Epitech, learning is often based on iteration: you try something, it fails, you adjust, and you try again.
+
+*You crash, you learn, and you improve.*
+
+But what determines whether you improve or not?
+
+- How do you interpret failure?
+- What makes you persist after repeated errors?
+- When do you change strategy instead of repeating the same actions?
+
+These questions are not specific to education. They are exactly the core problem of sequential decision-making under uncertainty.
+
+In Reinforcement Learning, an agent follows the same loop:
+
+- it acts in an environment,
+- receives feedback (reward or failure),
+- and updates its behavior to improve future decisions.
+
+The key difference is that in RL, this process is formalized and measurable.
+
+In this course, you will explore this loop in practice: from simple environments where feedback is immediate, to autonomous racing where decisions become harder, delayed, and more uncertain.
+
+---
+
+Now you have two ideas for the Kickoff. Pick what you think is best !
+
 ## History of Autonomous Driving Cars (strongly recommended)
 
 Start from classical robotics: early autonomous driving relied on hand-crafted perception + control pipelines. The core idea was to decompose the problem:

@@ -6,8 +6,11 @@ version:        0.3
 
 ### Bootstrap: Understanding Reinforcement Learning
 
-The objective of this bootstrap is **not** to write a complete RL algorithm from scratch. Instead, the goal is to understand the different building blocks of reinforcement learning before tackling autonomous racing.
+The objective of this bootstrap is **not** to write a complete RL algorithm from scratch. 
+Instead, the goal is to understand the different building blocks of reinforcement learning before tackling autonomous racing.
 
+**CartPole** is not the funniest application of RL.
+But it is the easiest and it contains the **RL basis** they need to have before doing the project. 
 
 #### Exercise 1 – Observe a random policy
 
@@ -24,6 +27,12 @@ Questions:
 * What is an action? -> Try a random policy instead... try to add noise to the policy ?
 * What is the reward? -> modify reward function and observe learning behavior. E.g. Add -1 to the reward (0 if success, -1 if fail). Does it change something ?
 
+> **In Reinforcement Learning** an agent interacts with an environment in a loop: 
+>
+> state → action → reward → next state
+>
+> The goal is not to directly choose actions, but to learn a function that estimates how good each action is in a given state.
+> In DQN, this function is called the Q-function.
 
 ---
 
